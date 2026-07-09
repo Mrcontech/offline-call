@@ -30,10 +30,13 @@ if not exist "%JAVA_HOME%\bin\java.exe" (
   exit /b 1
 )
 
-REM --- Guard: refuse to start if a build (java) is already running ---
-tasklist /FI "IMAGENAME eq java.exe" 2>NUL | find /I "java.exe" >NUL
-if not errorlevel 1 (
-  echo [BUSY] A build is already running ^(Java is active^).
+REM --- Guard: refuse to start if a GRADLE build is already running ---
+REM  NOTE: don't just look for any java.exe — an IDE (VS Code / Antigravity) runs
+REM  a Java language server that would trigger a false "busy". Match only a real
+REM  Gradle CLI process (its command line runs org.gradle.launcher.GradleMain).
+powershell -NoProfile -Command "exit @(Get-CimInstance Win32_Process -Filter \"Name='java.exe'\" -ErrorAction SilentlyContinue ^| Where-Object { $_.CommandLine -like '*GradleMain*' }).Count" >NUL 2>&1
+if errorlevel 1 (
+  echo [BUSY] A Gradle build is already running.
   echo Wait for it to finish, then run build.bat again.
   pause
   exit /b 1

@@ -37,8 +37,8 @@ class ContactsViewModel @Inject constructor(
         private set
 
     init {
-        viewModelScope.launch { contacts.refresh() }
-        viewModelScope.launch { socket.presenceEvents.collect { contacts.refresh() } }
+        viewModelScope.launch { runCatching { contacts.refresh() } }
+        viewModelScope.launch { runCatching { socket.presenceEvents.collect { contacts.refresh() } } }
     }
 
     fun onQueryChange(q: String) {

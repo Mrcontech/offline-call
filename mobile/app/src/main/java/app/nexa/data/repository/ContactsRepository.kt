@@ -40,7 +40,10 @@ class ContactsRepository @Inject constructor(
 
     /** Fetch contacts from the server and cache them (incl. public keys for offline). */
     suspend fun refresh() {
-        val remote = api.contacts().data
+        // Never let a network/HTTP/parse failure escape: this runs from ViewModel
+        // init coroutines, and an uncaught throw there would crash the whole app
+        // (e.g. tapping the Contacts tab while the server is unreachable/cold-starting).
+        val remote = runCatching { api.contacts().data }.getOrNull() ?: return
         val entities = remote.map { c ->
             val pub = runCatching { api.keyBundle(c.user.id).identityPub }.getOrNull()
             ContactEntity(

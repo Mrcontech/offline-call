@@ -6,12 +6,35 @@ import android.app.NotificationManager
 import android.os.Build
 import app.nexa.service.CallForegroundService
 import dagger.hilt.android.HiltAndroidApp
+import java.io.File
+import java.io.PrintWriter
 
 @HiltAndroidApp
 class NexaApp : Application() {
     override fun onCreate() {
         super.onCreate()
+        installCrashLogger()
         createNotificationChannels()
+    }
+
+    /**
+     * Last-resort safety net: if any thread dies with an uncaught exception, write
+     * the full stack trace to <app files>/last-crash.txt before the process exits,
+     * then let the system handle it normally. Lets us recover the exact cause of a
+     * field crash even without a USB/logcat connection.
+     */
+    private fun installCrashLogger() {
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            runCatching {
+                val dir = getExternalFilesDir(null) ?: filesDir
+                PrintWriter(File(dir, "last-crash.txt")).use { w ->
+                    w.println("thread: ${thread.name}")
+                    throwable.printStackTrace(w)
+                }
+            }
+            previous?.uncaughtException(thread, throwable)
+        }
     }
 
     private fun createNotificationChannels() {
