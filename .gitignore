@@ -3,8 +3,9 @@ node_modules/
 .pnp
 .pnp.js
 
-# env / secrets
+# env / secrets  (never commit real values)
 .env
+*.env
 .env.local
 .env.*.local
 !.env.example
