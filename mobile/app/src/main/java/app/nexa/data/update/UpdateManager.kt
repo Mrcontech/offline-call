@@ -10,7 +10,6 @@ import android.os.Environment
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import app.nexa.BuildConfig
-import app.nexa.data.local.SecureStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -32,18 +31,16 @@ import javax.inject.Singleton
 @Singleton
 class UpdateManager @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val store: SecureStore,
 ) {
     data class UpdateInfo(val versionCode: Int, val versionName: String, val notes: String)
 
     private val _available = MutableStateFlow<UpdateInfo?>(null)
     val available: StateFlow<UpdateInfo?> = _available
 
-    /** Fetch version.json from the configured server and compare with this build. */
+    /** Fetch version.json from the public website and compare with this build. */
     suspend fun check() {
-        val base = store.serverUrl.trimEnd('/')
         val info = runCatching {
-            val text = fetch("$base/version.json")
+            val text = fetch(VERSION_URL)
             val o = JSONObject(text)
             UpdateInfo(
                 versionCode = o.getInt("versionCode"),
@@ -67,14 +64,13 @@ class UpdateManager @Inject constructor(
         }
     }
 
-    /** Download the latest APK from the server, then launch the system installer. */
+    /** Download the latest APK from GitHub Releases, then launch the system installer. */
     fun downloadAndInstall() {
-        val base = store.serverUrl.trimEnd('/')
         val dest = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), APK_NAME)
         runCatching { if (dest.exists()) dest.delete() }
 
         val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-        val req = DownloadManager.Request(Uri.parse("$base/nexa.apk"))
+        val req = DownloadManager.Request(Uri.parse(APK_URL))
             .setTitle("Nexa update")
             .setDescription("Downloading the latest version…")
             .setDestinationInExternalFilesDir(context, Environment.DIRECTORY_DOWNLOADS, APK_NAME)
@@ -110,5 +106,10 @@ class UpdateManager @Inject constructor(
 
     private companion object {
         const val APK_NAME = "nexa-update.apk"
+        // Fixed public locations (independent of the user's backend server address):
+        //   - version manifest served by the website
+        //   - APK served by GitHub Releases (always the newest release)
+        const val VERSION_URL = "https://offline-call.vercel.app/version.json"
+        const val APK_URL = "https://github.com/Mrcontech/offline-call/releases/latest/download/nexa.apk"
     }
 }
