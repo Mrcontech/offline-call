@@ -10,8 +10,10 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -39,6 +41,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -79,6 +82,8 @@ fun ChatScreen(
     }
     var input by remember { mutableStateOf("") }
     var showEmoji by remember { mutableStateOf(false) }
+    var replyingTo by remember { mutableStateOf<ChatMessage?>(null) }
+    val byId = remember(messages) { messages.associateBy { it.id } }
     val listState = rememberLazyListState()
 
     LaunchedEffect(messages.size, typing) {
@@ -160,6 +165,20 @@ fun ChatScreen(
                 }
             } else {
                 Column {
+                    replyingTo?.let { r ->
+                        Row(
+                            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Box(Modifier.width(3.dp).height(34.dp).background(MaterialTheme.colorScheme.primary))
+                            Spacer(Modifier.width(8.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(if (r.mine) "You" else vm.peerName, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                                Text(replyPreview(r), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                            IconButton(onClick = { replyingTo = null }) { Icon(Icons.Default.Close, "Cancel reply") }
+                        }
+                    }
                     if (showEmoji) EmojiPanel(onPick = { input += it })
                     Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.Bottom) {
                         IconButton(onClick = { showEmoji = !showEmoji }) {
@@ -177,7 +196,7 @@ fun ChatScreen(
                         )
                         Spacer(Modifier.width(6.dp))
                         if (input.isNotBlank()) {
-                            FilledIconButton(onClick = { vm.send(input); input = ""; vm.stopTyping(); showEmoji = false }) {
+                            FilledIconButton(onClick = { vm.send(input, replyingTo?.id); input = ""; replyingTo = null; vm.stopTyping(); showEmoji = false }) {
                                 Icon(Icons.AutoMirrored.Filled.Send, "Send")
                             }
                         } else {
@@ -198,39 +217,104 @@ fun ChatScreen(
             verticalArrangement = Arrangement.spacedBy(4.dp),
             contentPadding = PaddingValues(vertical = 8.dp),
         ) {
-            items(messages, key = { it.id }) { MessageBubble(it, vm::mediaFile) }
+            items(messages, key = { it.id }) { msg ->
+                MessageBubble(
+                    message = msg,
+                    resolve = vm::mediaFile,
+                    replyTo = msg.replyToId?.let { byId[it] },
+                    onReact = { emoji -> vm.sendReaction(msg.id, emoji) },
+                    onReply = { replyingTo = msg },
+                )
+            }
         }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun MessageBubble(message: ChatMessage, resolve: suspend (MediaEnvelope) -> File?) {
+private fun MessageBubble(
+    message: ChatMessage,
+    resolve: suspend (MediaEnvelope) -> File?,
+    replyTo: ChatMessage?,
+    onReact: (String) -> Unit,
+    onReply: () -> Unit,
+) {
     val mine = message.mine
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start) {
-        Column(
-            Modifier.widthIn(max = 300.dp).clip(RoundedCornerShape(16.dp))
-                .background(if (mine) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
-                .padding(horizontal = 10.dp, vertical = 7.dp),
-        ) {
-            when {
-                message.type == "voice" && message.media != null -> VoiceNote(message.media, mine, resolve)
-                message.type == "video" && message.media != null -> VideoNote(message.media, resolve)
-                message.type == "image" && message.media != null -> ImageMessage(message.media, resolve)
-                else -> Text(message.text, color = if (mine) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface)
-            }
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.align(Alignment.End)) {
-                Text(
-                    TimeUtil.formatTime(message.time),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (mine) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                if (mine) {
-                    Spacer(Modifier.width(4.dp))
-                    Text(statusMark(message.status), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f), fontWeight = FontWeight.Bold)
+    var menu by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = if (mine) Alignment.End else Alignment.Start) {
+        Box {
+            Column(
+                Modifier.widthIn(max = 300.dp).clip(RoundedCornerShape(16.dp))
+                    .background(if (mine) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
+                    .combinedClickable(onClick = {}, onLongClick = { menu = true })
+                    .padding(horizontal = 10.dp, vertical = 7.dp),
+            ) {
+                replyTo?.let { QuotedReply(it, mine) }
+                when {
+                    message.type == "voice" && message.media != null -> VoiceNote(message.media, mine, resolve)
+                    message.type == "video" && message.media != null -> VideoNote(message.media, resolve)
+                    message.type == "image" && message.media != null -> ImageMessage(message.media, resolve)
+                    else -> Text(message.text, color = if (mine) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface)
                 }
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.align(Alignment.End)) {
+                    Text(
+                        TimeUtil.formatTime(message.time),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (mine) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (mine) {
+                        Spacer(Modifier.width(4.dp))
+                        Text(statusMark(message.status), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f), fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                Row(Modifier.padding(horizontal = 6.dp)) {
+                    listOf("👍", "❤️", "😂", "😮", "😢", "🙏").forEach { e ->
+                        Text(e, fontSize = 22.sp, modifier = Modifier.clickable { onReact(e); menu = false }.padding(6.dp))
+                    }
+                }
+                DropdownMenuItem(text = { Text("Reply") }, onClick = { onReply(); menu = false })
+            }
+        }
+        if (message.reactions.isNotEmpty()) ReactionChips(message.reactions, onReact)
+    }
+}
+
+@Composable
+private fun QuotedReply(replyTo: ChatMessage, mine: Boolean) {
+    val fg = if (mine) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+    Column(
+        Modifier.padding(bottom = 4.dp).clip(RoundedCornerShape(6.dp))
+            .background(fg.copy(alpha = 0.12f)).padding(horizontal = 6.dp, vertical = 3.dp),
+    ) {
+        Text(if (replyTo.mine) "You" else "Them", style = MaterialTheme.typography.labelSmall, color = fg.copy(alpha = 0.85f), fontWeight = FontWeight.Medium)
+        Text(replyPreview(replyTo), style = MaterialTheme.typography.bodySmall, color = fg.copy(alpha = 0.7f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+@Composable
+private fun ReactionChips(reactions: List<app.nexa.domain.model.MessageReaction>, onReact: (String) -> Unit) {
+    val grouped = reactions.groupingBy { it.emoji }.eachCount()
+    Row(Modifier.padding(top = 2.dp, start = 4.dp, end = 4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        grouped.forEach { (emoji, count) ->
+            Row(
+                Modifier.clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.surfaceVariant)
+                    .clickable { onReact(emoji) }.padding(horizontal = 6.dp, vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(emoji, fontSize = 12.sp)
+                if (count > 1) Text(" $count", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
+}
+
+private fun replyPreview(m: ChatMessage): String = when (m.type) {
+    "voice" -> "🎤 Voice message"
+    "video" -> "📹 Video"
+    "image" -> "📷 Photo"
+    else -> m.text.ifBlank { "Message" }
 }
 
 @Composable

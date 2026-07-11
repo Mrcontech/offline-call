@@ -64,9 +64,18 @@ data class MessageDto(
     val ciphertext: String,
     val nonce: String,
     val mediaObjectId: String? = null,
+    val replyToId: String? = null,
     val clientCreatedAt: String,
     val serverCreatedAt: String,
     val status: String = "sent",
+    val reactions: List<MessageReactionDto> = emptyList(),
+)
+
+@Serializable
+data class MessageReactionDto(
+    val messageId: String = "",
+    val userId: String,
+    val emoji: String,
 )
 
 @Serializable

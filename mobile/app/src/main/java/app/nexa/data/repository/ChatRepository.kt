@@ -11,12 +11,17 @@ import app.nexa.data.local.SecureStore
 import app.nexa.data.protocol.MediaEnvelope
 import app.nexa.data.protocol.MessageDto
 import app.nexa.data.protocol.SendMessageRequest
+import app.nexa.data.realtime.ReactionEvent
 import app.nexa.data.realtime.SocketManager
 import app.nexa.data.remote.ApiService
 import app.nexa.domain.model.ChatMessage
+import app.nexa.domain.model.MessageReaction
 import app.nexa.domain.model.UiConversation
+import app.nexa.data.protocol.MessageReactionDto
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
@@ -42,12 +47,36 @@ class ChatRepository @Inject constructor(
     private val json: Json,
     private val scope: CoroutineScope,
 ) {
+    // In-memory reactions (messageId -> reactions). Loaded from history + realtime;
+    // no Room column needed (re-fetched on chat open).
+    private val reactions = MutableStateFlow<Map<String, List<MessageReaction>>>(emptyMap())
+
     init {
         scope.launch { socket.messageEvents.collect { onIncoming(it) } }
         scope.launch { socket.receiptEvents.collect { onReceipt(it) } }
+        scope.launch { socket.reactionEvents.collect { applyReaction(it) } }
         scope.launch {
             socket.connected.collect { up -> if (up) { flushQueue(); pullMissed() } }
         }
+    }
+
+    private fun applyReaction(e: ReactionEvent) {
+        reactions.update(e.messageId) { current ->
+            val without = current.filterNot { it.userId == e.userId && it.emoji == e.emoji }
+            if (e.action == "add") without + MessageReaction(e.userId, e.emoji) else without
+        }
+    }
+
+    private fun mergeReactions(messageId: String, incoming: List<MessageReactionDto>) {
+        if (incoming.isEmpty()) return
+        reactions.update(messageId) { incoming.map { MessageReaction(it.userId, it.emoji) } }
+    }
+
+    private fun MutableStateFlow<Map<String, List<MessageReaction>>>.update(
+        messageId: String,
+        transform: (List<MessageReaction>) -> List<MessageReaction>,
+    ) {
+        value = value.toMutableMap().apply { this[messageId] = transform(this[messageId] ?: emptyList()) }
     }
 
     fun observeConversations(): Flow<List<UiConversation>> =
@@ -56,7 +85,7 @@ class ChatRepository @Inject constructor(
         }
 
     fun observeMessages(conversationId: String): Flow<List<ChatMessage>> =
-        messageDao.observe(conversationId).map { list ->
+        combine(messageDao.observe(conversationId), reactions) { list, reacts ->
             list.map { e ->
                 val env = if (e.type != "text") {
                     runCatching { json.decodeFromString(MediaEnvelope.serializer(), e.plaintext) }.getOrNull()
@@ -65,6 +94,8 @@ class ChatRepository @Inject constructor(
                     id = e.id, mine = e.mine, type = e.type,
                     text = if (e.type == "text") e.plaintext else "",
                     media = env, time = e.clientCreatedAt, status = e.status,
+                    replyToId = e.replyTo,
+                    reactions = reacts[e.id] ?: emptyList(),
                 )
             }
         }
@@ -105,7 +136,7 @@ class ChatRepository @Inject constructor(
         history.lastOrNull { it.senderId != store.userId }?.let { markRead(conversationId, it.id) }
     }
 
-    suspend fun send(conversationId: String, peerId: String, text: String) {
+    suspend fun send(conversationId: String, peerId: String, text: String, replyToId: String? = null) {
         val trimmed = text.trim()
         if (trimmed.isEmpty()) return
         val myPriv = store.identity().privateKey
@@ -122,12 +153,13 @@ class ChatRepository @Inject constructor(
             type = "text", plaintext = trimmed, ciphertext = sealed.ciphertext, nonce = sealed.nonce,
             clientCreatedAt = now, serverCreatedAt = now,
             status = if (socket.connected.value) "sent" else "queued",
+            replyTo = replyToId,
         )
         messageDao.insert(entity)
         touchConversation(conversationId, peerId, trimmed, now, incUnread = false)
 
         if (socket.connected.value) {
-            socket.sendMessage(conversationId, id, sealed.ciphertext, sealed.nonce, iso)
+            socket.sendMessage(conversationId, id, sealed.ciphertext, sealed.nonce, iso, replyToId)
         } else {
             runCatching {
                 api.sendMessageFallback(conversationId, SendMessageRequest(id, "text", sealed.ciphertext, sealed.nonce, null, iso))
@@ -246,8 +278,19 @@ class ChatRepository @Inject constructor(
                 clientCreatedAt = TimeUtil.parseIso(dto.clientCreatedAt),
                 serverCreatedAt = TimeUtil.parseIso(dto.serverCreatedAt),
                 status = dto.status,
+                replyTo = dto.replyToId,
             ),
         )
+        mergeReactions(dto.id, dto.reactions)
+    }
+
+    /** Toggle my reaction on a message (adds if absent, removes if present). */
+    fun sendReaction(messageId: String, emoji: String) {
+        val me = store.userId ?: return
+        val mine = reactions.value[messageId].orEmpty().any { it.userId == me && it.emoji == emoji }
+        val action = if (mine) "remove" else "add"
+        socket.setReaction(messageId, emoji, action)
+        applyReaction(ReactionEvent(messageId, me, emoji, action)) // optimistic
     }
 
     private suspend fun touchConversation(convId: String, peerId: String, lastText: String, at: Long, incUnread: Boolean) {

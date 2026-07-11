@@ -27,12 +27,16 @@ data class UiConversation(
 data class ChatMessage(
     val id: String,
     val mine: Boolean,
-    val type: String, // text | voice | video
+    val type: String, // text | voice | video | image
     val text: String,
     val media: app.nexa.data.protocol.MediaEnvelope?,
     val time: Long,
     val status: String, // queued | sent | delivered | read
+    val replyToId: String? = null,
+    val reactions: List<MessageReaction> = emptyList(),
 )
+
+data class MessageReaction(val userId: String, val emoji: String)
 
 enum class CallType {
     VOICE, VIDEO;

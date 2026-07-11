@@ -23,6 +23,8 @@ sealed interface CallEvent {
     data class Ended(val callId: String, val reason: String?, val duration: Int) : CallEvent
 }
 
+data class ReactionEvent(val messageId: String, val userId: String, val emoji: String, val action: String)
+
 sealed interface SignalEvent {
     val callId: String
     data class Offer(override val callId: String, val sdp: String) : SignalEvent

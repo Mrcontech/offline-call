@@ -1,5 +1,5 @@
 {
-  "versionCode": 12,
-  "versionName": "0.3.0",
-  "notes": "Profile pictures! Set yours in Settings → Change photo. Your picture now shows in chats, contacts, and incoming calls. Tap Update to install."
+  "versionCode": 13,
+  "versionName": "0.3.1",
+  "notes": "Reply to messages and react with emojis! Long-press a message to reply or add a reaction. Plus forgot-password on the website. Tap Update to install."
 }

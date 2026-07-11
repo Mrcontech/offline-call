@@ -35,6 +35,7 @@ class SocketManager @Inject constructor(
 
     val messageEvents = MutableSharedFlow<MessageDto>(extraBufferCapacity = 128)
     val receiptEvents = MutableSharedFlow<ReceiptEvent>(extraBufferCapacity = 128)
+    val reactionEvents = MutableSharedFlow<ReactionEvent>(extraBufferCapacity = 128)
     val typingEvents = MutableSharedFlow<TypingEvent>(extraBufferCapacity = 64)
     val presenceEvents = MutableSharedFlow<PresenceEvent>(extraBufferCapacity = 128)
     val callEvents = MutableSharedFlow<CallEvent>(extraBufferCapacity = 64)
@@ -87,6 +88,13 @@ class SocketManager @Inject constructor(
                 )
             }
         }
+        s.on(RtEvents.REACTION_UPDATE) { a ->
+            obj(a)?.let { o ->
+                reactionEvents.tryEmit(
+                    ReactionEvent(o.getString("messageId"), o.getString("userId"), o.getString("emoji"), o.getString("action")),
+                )
+            }
+        }
         s.on(RtEvents.TYPING) { a ->
             obj(a)?.let { o -> typingEvents.tryEmit(TypingEvent(o.getString("conversationId"), o.getString("userId"), o.optBoolean("active"))) }
         }
@@ -112,11 +120,12 @@ class SocketManager @Inject constructor(
     // ---- Emit helpers ----
     fun heartbeat() { socket?.emit(RtEvents.PRESENCE_HEARTBEAT) }
 
-    fun sendMessage(convId: String, id: String, ciphertext: String, nonce: String, clientCreatedAt: String) {
+    fun sendMessage(convId: String, id: String, ciphertext: String, nonce: String, clientCreatedAt: String, replyToId: String? = null) {
         socket?.emit(
             RtEvents.MESSAGE_SEND,
             JSONObject().put("id", id).put("conversationId", convId).put("type", "text")
-                .put("ciphertext", ciphertext).put("nonce", nonce).put("clientCreatedAt", clientCreatedAt),
+                .put("ciphertext", ciphertext).put("nonce", nonce).put("clientCreatedAt", clientCreatedAt)
+                .apply { if (replyToId != null) put("replyToId", replyToId) },
         )
     }
 
@@ -130,6 +139,10 @@ class SocketManager @Inject constructor(
                 .put("ciphertext", ciphertext).put("nonce", nonce)
                 .put("mediaObjectId", mediaObjectId).put("clientCreatedAt", clientCreatedAt),
         )
+    }
+
+    fun setReaction(messageId: String, emoji: String, action: String) {
+        socket?.emit(RtEvents.REACTION_SET, JSONObject().put("messageId", messageId).put("emoji", emoji).put("action", action))
     }
 
     fun markDelivered(messageId: String) { socket?.emit(RtEvents.MESSAGE_DELIVERED, JSONObject().put("messageId", messageId)) }

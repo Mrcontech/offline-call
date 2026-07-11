@@ -18,6 +18,7 @@ data class MessageEntity(
     val clientCreatedAt: Long,
     val serverCreatedAt: Long,
     val status: String,                        // queued | sent | delivered | read
+    val replyTo: String? = null,               // id of the message this replies to
 )
 
 @Entity(tableName = "conversations")

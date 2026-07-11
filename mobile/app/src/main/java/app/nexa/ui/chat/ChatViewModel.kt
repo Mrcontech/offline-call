@@ -51,7 +51,8 @@ class ChatViewModel @Inject constructor(
         }
     }
 
-    fun send(text: String) = viewModelScope.launch { chat.send(conversationId, peerId, text) }
+    fun send(text: String, replyToId: String? = null) = viewModelScope.launch { chat.send(conversationId, peerId, text, replyToId) }
+    fun sendReaction(messageId: String, emoji: String) = chat.sendReaction(messageId, emoji)
     fun notifyTyping() = chat.typing(conversationId, true)
     fun stopTyping() = chat.typing(conversationId, false)
 

@@ -5,7 +5,7 @@ import androidx.room.RoomDatabase
 
 @Database(
     entities = [MessageEntity::class, ConversationEntity::class, ContactEntity::class],
-    version = 2, // v2: contacts gained incoming/favorite/presence (destructive migration; cache re-fetched)
+    version = 3, // v3: messages gained replyTo (destructive migration; cache re-fetched)
     exportSchema = false,
 )
 abstract class NexaDatabase : RoomDatabase() {
