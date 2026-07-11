@@ -41,6 +41,9 @@ export default function LoginPage() {
           <Field label="Password" htmlFor="pw">
             <Input id="pw" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" autoComplete="current-password" required />
           </Field>
+          <div className="text-right">
+            <Link href="/forgot-password" className="text-sm text-primary hover:underline">Forgot password?</Link>
+          </div>
 
           {error && <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
 

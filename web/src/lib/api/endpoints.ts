@@ -32,6 +32,10 @@ export const authApi = {
   }) => api<AuthResult & { devVerifyCode?: string }>("/auth/login", { method: "POST", body, auth: false }),
 
   logout: (refreshToken: string) => api("/auth/logout", { method: "POST", body: { refreshToken }, auth: false }),
+  forgotPassword: (email: string) =>
+    api<{ ok: boolean }>("/auth/forgot-password", { method: "POST", body: { email }, auth: false }),
+  resetPassword: (token: string, password: string) =>
+    api<{ ok: boolean }>("/auth/reset-password", { method: "POST", body: { token, password }, auth: false }),
   me: () => api<{ user: UserPrivate; device: DeviceDto }>("/auth/me"),
   verifyDevice: (id: string, code: string) =>
     api<{ device: DeviceDto }>(`/auth/devices/${id}/verify`, { method: "POST", body: { code } }),

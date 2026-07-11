@@ -4,6 +4,8 @@ import {
   loginSchema,
   refreshSchema,
   verifyDeviceSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
 } from "@nexa/shared";
 import { validate, valid } from "../../middleware/validate.js";
 import { requireAuth } from "../../middleware/auth.js";
@@ -52,6 +54,28 @@ authRouter.post(
   asyncHandler(async (_req, res) => {
     await authService.logout(valid<typeof refreshSchema>(res).refreshToken);
     res.status(204).end();
+  }),
+);
+
+authRouter.post(
+  "/forgot-password",
+  rateLimit({ scope: "auth:forgot", max: 5, windowSec: 900, keyBy: ipKey }),
+  validate(forgotPasswordSchema),
+  asyncHandler(async (req, res) => {
+    await authService.requestPasswordReset(valid<typeof forgotPasswordSchema>(res).email);
+    // Always 200 — don't reveal whether the email is registered.
+    res.json({ ok: true });
+  }),
+);
+
+authRouter.post(
+  "/reset-password",
+  rateLimit({ scope: "auth:reset", max: 10, windowSec: 900, keyBy: ipKey }),
+  validate(resetPasswordSchema),
+  asyncHandler(async (req, res) => {
+    const { token, password } = valid<typeof resetPasswordSchema>(res);
+    await authService.resetPassword(token, password);
+    res.json({ ok: true });
   }),
 );
 

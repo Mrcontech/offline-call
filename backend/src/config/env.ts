@@ -48,6 +48,13 @@ const envSchema = z.object({
 
   RATE_LIMIT_WINDOW: num(60),
   RATE_LIMIT_MAX: num(120),
+
+  // Email (password reset). Optional — if RESEND_API_KEY is unset, reset emails
+  // are skipped (the endpoints still work, just no mail is sent).
+  RESEND_API_KEY: z.string().optional(),
+  MAIL_FROM: z.string().default("Nexa <onboarding@resend.dev>"),
+  // Public web app URL used to build the reset link (falls back to first CORS origin).
+  WEB_URL: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);

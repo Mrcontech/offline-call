@@ -9,6 +9,8 @@ import { Errors } from "../../lib/http-error.js";
 import { toUserPrivate, toDeviceDto } from "../../lib/mappers.js";
 import { audit } from "../admin/audit.service.js";
 import { partitionForIp, isLockEnabled, ONLINE_PARTITION } from "../access/access.service.js";
+import { redis } from "../../config/redis.js";
+import { sendEmail } from "../../lib/email.js";
 import type { AuthResult, Platform } from "@nexa/shared";
 import type { RegisterInput, LoginInput } from "@nexa/shared";
 
@@ -229,4 +231,57 @@ export async function me(userId: string, deviceId: string) {
 /** Housekeeping — purge expired refresh tokens (call from a cron/interval). */
 export async function purgeExpiredTokens(): Promise<void> {
   await db.delete(refreshTokens).where(lt(refreshTokens.expiresAt, new Date()));
+}
+
+const RESET_TTL_SECONDS = 3600; // 1 hour
+const resetKey = (token: string) => `pwreset:${sha256(token)}`;
+
+/**
+ * Start a password reset: email a one-time link. Always resolves the same way
+ * (even if the email isn't registered) so it can't be used to probe accounts.
+ * The token is stored (hashed) in Redis with a 1h TTL — no DB migration needed.
+ */
+export async function requestPasswordReset(email: string): Promise<void> {
+  const [user] = await db
+    .select({ id: users.id, username: users.username })
+    .from(users)
+    .where(eq(users.email, email))
+    .limit(1);
+  if (!user) return;
+
+  const token = opaqueToken();
+  await redis.set(resetKey(token), user.id, "EX", RESET_TTL_SECONDS);
+
+  const base = (env.WEB_URL ?? env.CORS_ORIGINS[0] ?? "").replace(/\/$/, "");
+  const link = `${base}/reset-password?token=${encodeURIComponent(token)}`;
+  await sendEmail(
+    email,
+    "Reset your Nexa password",
+    `<div style="font-family:system-ui,sans-serif;max-width:480px;margin:0 auto">
+       <h2>Reset your password</h2>
+       <p>Hi ${user.username}, we got a request to reset your Nexa password.</p>
+       <p><a href="${link}" style="display:inline-block;background:#4F7CFF;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none">Set a new password</a></p>
+       <p style="color:#888;font-size:13px">This link expires in 1 hour. If you didn't request it, you can ignore this email.</p>
+     </div>`,
+  );
+  await audit(user.id, "auth.password_reset_requested", user.id);
+}
+
+/** Finish a password reset: consume the token, set the new password, and kill
+ *  all existing sessions for safety. */
+export async function resetPassword(token: string, newPassword: string): Promise<void> {
+  const key = resetKey(token);
+  const userId = await redis.get(key);
+  if (!userId) throw Errors.unauthenticated("This reset link is invalid or has expired");
+
+  const passwordHash = await hashPassword(newPassword);
+  await db.update(users).set({ passwordHash, updatedAt: new Date() }).where(eq(users.id, userId));
+  await redis.del(key);
+
+  // Invalidate every existing session (refresh tokens) for this user.
+  const userDevices = await db.select({ id: devices.id }).from(devices).where(eq(devices.userId, userId));
+  for (const d of userDevices) {
+    await db.delete(refreshTokens).where(eq(refreshTokens.deviceId, d.id));
+  }
+  await audit(userId, "auth.password_reset", userId);
 }

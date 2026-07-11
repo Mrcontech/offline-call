@@ -47,6 +47,15 @@ export const userSearchSchema = z.object({
   q: z.string().min(2).max(32),
 });
 
+export const forgotPasswordSchema = z.object({
+  email: z.string().email().max(254),
+});
+
+export const resetPasswordSchema = z.object({
+  token: z.string().min(10).max(300),
+  password: z.string().min(8).max(200),
+});
+
 export const createContactSchema = z.object({
   contactUserId: z.string().uuid(),
 });
