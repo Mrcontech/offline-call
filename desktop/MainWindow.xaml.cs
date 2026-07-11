@@ -33,8 +33,9 @@ public partial class MainWindow : Window
         _server = LoadServer();
         if (string.IsNullOrWhiteSpace(_server))
         {
-            _server = PromptForServer(DefaultServer);
-            if (string.IsNullOrWhiteSpace(_server)) { Close(); return; }
+            // Default straight to the online app — no confusing "enter a LAN address"
+            // prompt on first run. LAN/offline users switch via "Change server".
+            _server = DefaultServer;
             SaveServer(_server);
         }
         ServerLabel.Text = _server;
@@ -134,6 +135,15 @@ public partial class MainWindow : Window
         if (string.IsNullOrWhiteSpace(next) || next == _server) return;
         SaveServer(next);
         // The secure-origin flag is fixed at engine startup, so restart to apply.
+        Process.Start(new ProcessStartInfo(Environment.ProcessPath!) { UseShellExecute = true });
+        Application.Current.Shutdown();
+    }
+
+    /// <summary>Reset to the public online app and restart — the one-click escape
+    /// when a saved LAN server is unreachable.</summary>
+    private void UseOnline_Click(object sender, RoutedEventArgs e)
+    {
+        SaveServer(DefaultServer);
         Process.Start(new ProcessStartInfo(Environment.ProcessPath!) { UseShellExecute = true });
         Application.Current.Shutdown();
     }
