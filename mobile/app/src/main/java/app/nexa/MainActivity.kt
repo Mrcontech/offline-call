@@ -16,6 +16,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.nexa.data.repository.AuthRepository
 import app.nexa.data.repository.CallManager
 import app.nexa.service.CallForegroundService
+import app.nexa.service.MessagingService
 import app.nexa.ui.navigation.NexaNavHost
 import app.nexa.ui.theme.NexaTheme
 import app.nexa.ui.update.UpdateGate
@@ -52,6 +53,13 @@ class MainActivity : ComponentActivity() {
                 ) { /* results handled per-feature at call/record time */ }
 
                 LaunchedEffect(Unit) { permissionLauncher.launch(requiredPermissions()) }
+
+                // Built-in push: keep a background service alive while logged in so
+                // messages/calls arrive when the app is closed (no Firebase).
+                LaunchedEffect(loggedIn) {
+                    if (loggedIn) MessagingService.start(this@MainActivity)
+                    else MessagingService.stop(this@MainActivity)
+                }
 
                 NexaNavHost(navController = navController, startLoggedIn = loggedIn)
                 if (loggedIn) UpdateGate() // prompts if the server advertises a newer version

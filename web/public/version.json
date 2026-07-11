@@ -1,5 +1,5 @@
 {
-  "versionCode": 9,
-  "versionName": "0.2.7",
-  "notes": "Fixes the crash when sending a voice note, video, or photo (they now upload and send correctly). Incoming calls now show the caller's name instead of a generic label. Smaller, faster Windows download. Tap Update to install."
+  "versionCode": 10,
+  "versionName": "0.2.8",
+  "notes": "New: emoji picker in chats, and push notifications — you'll now get alerted about new messages and calls even when the app is closed (no Google/Firebase; it uses your own server). Tap Update to install."
 }

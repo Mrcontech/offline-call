@@ -4,7 +4,9 @@ import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.os.Build
+import app.nexa.service.AppForeground
 import app.nexa.service.CallForegroundService
+import app.nexa.service.MessagingService
 import dagger.hilt.android.HiltAndroidApp
 import java.io.File
 import java.io.PrintWriter
@@ -14,6 +16,7 @@ class NexaApp : Application() {
     override fun onCreate() {
         super.onCreate()
         installCrashLogger()
+        registerActivityLifecycleCallbacks(AppForeground)
         createNotificationChannels()
     }
 
@@ -58,6 +61,22 @@ class NexaApp : Application() {
                 setSound(null, null)
                 enableVibration(false)
             },
+        )
+        // New-message notifications (built-in push).
+        nm.createNotificationChannel(
+            NotificationChannel(
+                MessagingService.CHANNEL_MESSAGES,
+                "Messages",
+                NotificationManager.IMPORTANCE_HIGH,
+            ).apply { description = "New chat messages" },
+        )
+        // The quiet "Nexa is active" foreground-service notification.
+        nm.createNotificationChannel(
+            NotificationChannel(
+                MessagingService.CHANNEL_ONGOING,
+                "Running in background",
+                NotificationManager.IMPORTANCE_MIN,
+            ).apply { description = "Keeps Nexa connected so you get messages and calls" },
         )
     }
 }

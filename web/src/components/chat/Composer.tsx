@@ -1,10 +1,12 @@
 "use client";
 import { useRef, useState, type KeyboardEvent } from "react";
-import { Send, Mic, Video, X, Check, Image as ImageIcon } from "lucide-react";
+import { Send, Mic, Video, X, Check, Image as ImageIcon, Smile } from "lucide-react";
 import { Textarea } from "@/components/ui/Input";
 import { useMediaRecorder } from "@/lib/hooks/useMediaRecorder";
 import { VideoRecorderModal } from "./VideoRecorderModal";
 import { cn, formatDuration } from "@/lib/utils";
+
+const EMOJIS = "😀 😁 😂 🤣 😊 😍 😘 😎 🤩 🥳 😉 🙂 🙃 😇 🥰 🤗 🤔 🙄 😏 😴 😌 😔 😢 😭 😤 😠 😡 🤯 😳 🥺 😅 😆 😜 😝 🤪 😋 👍 👎 👏 🙏 💪 👌 ✌️ 🤝 🙌 👋 👀 ❤️ 🧡 💛 💚 💙 💜 🖤 💔 💯 🔥 🎉 🎊 ✨ ⭐ 🌟 💫 🙈".split(" ");
 
 export function Composer({
   onSend,
@@ -21,6 +23,7 @@ export function Composer({
 }) {
   const [text, setText] = useState("");
   const [videoOpen, setVideoOpen] = useState(false);
+  const [showEmoji, setShowEmoji] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const voice = useMediaRecorder();
 
@@ -60,18 +63,44 @@ export function Composer({
 
   return (
     <>
-      <div className="flex items-end gap-2 border-t border-border bg-card px-3 py-3">
-        <Textarea
-          value={text}
-          onChange={(e) => {
-            setText(e.target.value);
-            onTyping();
-          }}
-          onKeyDown={onKeyDown}
-          rows={1}
-          placeholder="Message…"
-          className="max-h-32 flex-1"
-        />
+      <div className="border-t border-border bg-card">
+        {showEmoji && (
+          <div className="grid max-h-48 grid-cols-8 gap-1 overflow-y-auto border-b border-border p-2 text-2xl">
+            {EMOJIS.map((e) => (
+              <button
+                key={e}
+                type="button"
+                onClick={() => setText((t) => t + e)}
+                className="rounded p-1 hover:bg-muted"
+              >
+                {e}
+              </button>
+            ))}
+          </div>
+        )}
+        <div className="flex items-end gap-2 px-3 py-3">
+          <button
+            type="button"
+            onClick={() => setShowEmoji((v) => !v)}
+            aria-label="Emoji"
+            className={cn(
+              "grid h-11 w-11 shrink-0 place-items-center rounded-full hover:bg-muted",
+              showEmoji ? "text-primary" : "text-muted-foreground",
+            )}
+          >
+            <Smile size={20} />
+          </button>
+          <Textarea
+            value={text}
+            onChange={(e) => {
+              setText(e.target.value);
+              onTyping();
+            }}
+            onKeyDown={onKeyDown}
+            rows={1}
+            placeholder="Message…"
+            className="max-h-32 flex-1"
+          />
         {text.trim() ? (
           <button
             onClick={submit}
@@ -116,6 +145,7 @@ export function Composer({
             </button>
           </>
         )}
+        </div>
       </div>
 
       <VideoRecorderModal open={videoOpen} onClose={() => setVideoOpen(false)} onSend={onSendVideo} />

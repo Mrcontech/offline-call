@@ -13,6 +13,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -29,7 +32,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -66,6 +71,7 @@ fun ChatScreen(
         }
     }
     var input by remember { mutableStateOf("") }
+    var showEmoji by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
 
     LaunchedEffect(messages.size, typing) {
@@ -146,25 +152,34 @@ fun ChatScreen(
                     FilledIconButton(onClick = vm::stopAndSendVoice) { Icon(Icons.AutoMirrored.Filled.Send, "Send voice") }
                 }
             } else {
-                Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.Bottom) {
-                    OutlinedTextField(
-                        value = input,
-                        onValueChange = { input = it; vm.notifyTyping() },
-                        placeholder = { Text("Message…") },
-                        modifier = Modifier.weight(1f),
-                        maxLines = 4,
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    if (input.isNotBlank()) {
-                        FilledIconButton(onClick = { vm.send(input); input = ""; vm.stopTyping() }) {
-                            Icon(Icons.AutoMirrored.Filled.Send, "Send")
+                Column {
+                    if (showEmoji) EmojiPanel(onPick = { input += it })
+                    Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.Bottom) {
+                        IconButton(onClick = { showEmoji = !showEmoji }) {
+                            Icon(
+                                Icons.Default.EmojiEmotions, "Emoji",
+                                tint = if (showEmoji) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         }
-                    } else {
-                        IconButton(onClick = {
-                            pickImage.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                        }) { Icon(Icons.Default.Image, "Send photo") }
-                        IconButton(onClick = { showRecorder = true }) { Icon(Icons.Default.Videocam, "Record video message") }
-                        FilledIconButton(onClick = { requestVoice() }) { Icon(Icons.Default.Mic, "Record voice message") }
+                        OutlinedTextField(
+                            value = input,
+                            onValueChange = { input = it; vm.notifyTyping() },
+                            placeholder = { Text("Message…") },
+                            modifier = Modifier.weight(1f),
+                            maxLines = 4,
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        if (input.isNotBlank()) {
+                            FilledIconButton(onClick = { vm.send(input); input = ""; vm.stopTyping(); showEmoji = false }) {
+                                Icon(Icons.AutoMirrored.Filled.Send, "Send")
+                            }
+                        } else {
+                            IconButton(onClick = {
+                                pickImage.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                            }) { Icon(Icons.Default.Image, "Send photo") }
+                            IconButton(onClick = { showRecorder = true }) { Icon(Icons.Default.Videocam, "Record video message") }
+                            FilledIconButton(onClick = { requestVoice() }) { Icon(Icons.Default.Mic, "Record voice message") }
+                        }
                     }
                 }
             }
@@ -301,4 +316,34 @@ private fun VideoNote(env: MediaEnvelope, resolve: suspend (MediaEnvelope) -> Fi
 
 private fun statusMark(status: String) = when (status) {
     "queued" -> "🕘"; "sent" -> "✓"; "delivered" -> "✓✓"; "read" -> "✓✓"; else -> ""
+}
+
+private val EMOJIS = listOf(
+    "😀", "😁", "😂", "🤣", "😊", "😍", "😘", "😎", "🤩", "🥳",
+    "😉", "🙂", "🙃", "😇", "🥰", "😗", "☺️", "🤗", "🤔", "🤨",
+    "😐", "🙄", "😏", "😴", "😌", "😔", "😢", "😭", "😤", "😠",
+    "😡", "🤯", "😳", "🥺", "😨", "😅", "😆", "😜", "😝", "🤪",
+    "😋", "🤤", "🥴", "🤒", "🤕", "👍", "👎", "👏", "🙏", "💪",
+    "👌", "✌️", "🤞", "🤝", "🙌", "👋", "🤙", "👀", "❤️", "🧡",
+    "💛", "💚", "💙", "💜", "🖤", "💔", "💯", "🔥", "🎉", "🎊",
+    "✨", "⭐", "🌟", "💫", "🙈", "😬", "😑", "🤗", "🤠", "🥶",
+)
+
+@Composable
+private fun EmojiPanel(onPick: (String) -> Unit) {
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(8),
+        modifier = Modifier.fillMaxWidth().height(216.dp)
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+            .padding(horizontal = 6.dp),
+    ) {
+        items(EMOJIS) { e ->
+            Text(
+                e,
+                fontSize = 24.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.clickable { onPick(e) }.padding(vertical = 8.dp),
+            )
+        }
+    }
 }
