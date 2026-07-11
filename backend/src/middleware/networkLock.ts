@@ -1,20 +1,12 @@
 import type { NextFunction, Request, Response } from "express";
-import { isIpAllowed } from "../modules/access/access.service.js";
-import { HttpError } from "../lib/http-error.js";
 
 /**
- * Blocks app requests from clients outside the admin-approved networks (when the
- * lock is on). Fail-open on internal errors so a DB hiccup never bricks the app.
- * Auth + admin routes are intentionally NOT wrapped, so users can still log in
- * and admins can always manage the lock.
+ * Office isolation is enforced by VISIBILITY partitioning (users.service) and
+ * per-account login binding (auth.service) — NOT by blocking network access.
+ * Online/mobile users must always be able to reach the app; only who they can
+ * *see* is partitioned by network. This gate is therefore a pass-through, kept
+ * in the route wiring so the isolation model stays explicit and easy to restore.
  */
-export async function enforceNetworkLock(req: Request, _res: Response, next: NextFunction) {
-  try {
-    if (await isIpAllowed(req.ip ?? "")) return next();
-    return next(
-      new HttpError(403, "NETWORK_RESTRICTED", "Access is restricted to approved networks on this deployment"),
-    );
-  } catch {
-    next(); // fail-open
-  }
+export async function enforceNetworkLock(_req: Request, _res: Response, next: NextFunction) {
+  return next();
 }

@@ -9,18 +9,19 @@ import { validate, valid } from "../../middleware/validate.js";
 import { requireAuth } from "../../middleware/auth.js";
 import { rateLimit } from "../../middleware/rateLimit.js";
 import { asyncHandler } from "../../middleware/error.js";
+import { clientIp } from "../access/access.service.js";
 import * as authService from "./auth.service.js";
 
 export const authRouter = Router();
 
-const ipKey = (req: { ip?: string }) => req.ip ?? "anon";
+const ipKey = (req: { headers?: Record<string, unknown>; ip?: string }) => clientIp(req) || "anon";
 
 authRouter.post(
   "/register",
   rateLimit({ scope: "auth:register", max: 10, windowSec: 3600, keyBy: ipKey }),
   validate(registerSchema),
   asyncHandler(async (req, res) => {
-    const result = await authService.register(valid<typeof registerSchema>(res), { ip: req.ip });
+    const result = await authService.register(valid<typeof registerSchema>(res), { ip: clientIp(req) });
     res.status(201).json(result);
   }),
 );
@@ -30,7 +31,7 @@ authRouter.post(
   rateLimit({ scope: "auth:login", max: 20, windowSec: 900, keyBy: ipKey }),
   validate(loginSchema),
   asyncHandler(async (req, res) => {
-    const result = await authService.login(valid<typeof loginSchema>(res), { ip: req.ip });
+    const result = await authService.login(valid<typeof loginSchema>(res), { ip: clientIp(req) });
     res.json(result);
   }),
 );

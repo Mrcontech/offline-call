@@ -15,11 +15,23 @@ const LOCK_KEY = "network_lock";
 export function normalizeIp(raw: string | undefined | null): string {
   if (!raw) return "";
   let ip = raw.trim();
+  // If it's a comma list (X-Forwarded-For), take the first (original client)
+  // BEFORE stripping IPv4-mapped prefixes, since each entry may carry one.
+  if (ip.includes(",")) ip = ip.split(",")[0]!.trim();
   if (ip.startsWith("::ffff:")) ip = ip.slice(7); // IPv4-mapped IPv6
   if (ip === "::1") ip = "127.0.0.1";
-  // If it's a comma list (X-Forwarded-For), take the first (original client).
-  if (ip.includes(",")) ip = ip.split(",")[0]!.trim();
   return ip;
+}
+
+/**
+ * The real originating client IP. Render (and most hosts) sit behind several
+ * proxy hops, so Express's `req.ip` can resolve to an internal address; the
+ * left-most X-Forwarded-For entry is the original client. Falls back to req.ip.
+ */
+export function clientIp(req: { headers?: Record<string, unknown>; ip?: string }): string {
+  const xff = req.headers?.["x-forwarded-for"];
+  const raw = (Array.isArray(xff) ? xff[0] : xff) as string | undefined;
+  return normalizeIp(raw || req.ip || "");
 }
 
 function ipToLong(ip: string): number | null {

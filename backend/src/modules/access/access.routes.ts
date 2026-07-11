@@ -17,7 +17,7 @@ accessRouter.get(
     res.json({
       enabled: await access.isLockEnabled(),
       networks: await access.listNetworks(),
-      yourIp: access.normalizeIp(req.ip), // so the admin can add their current network
+      yourIp: access.clientIp(req), // so the admin can add their current network
     });
   }),
 );

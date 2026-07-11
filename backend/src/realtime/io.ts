@@ -6,7 +6,6 @@ import { env } from "../config/env.js";
 import { pubClient, subClient } from "../config/redis.js";
 import { logger } from "../lib/logger.js";
 import { socketAuth } from "./auth.js";
-import { isIpAllowed } from "../modules/access/access.service.js";
 import { setIo } from "./emitter.js";
 import { registerPresence } from "./presence.js";
 import { registerMessaging } from "./messaging.js";
@@ -29,16 +28,8 @@ export function initRealtime(httpServer: HttpServer): Server {
 
   const nsp = io.of(RT_NAMESPACE);
   nsp.use(socketAuth);
-  // Enforce the network lock on realtime too (blocks calls/messages off-network).
-  nsp.use(async (socket, next) => {
-    const ip = (socket.handshake.headers["x-forwarded-for"] as string | undefined) ?? socket.handshake.address;
-    try {
-      if (await isIpAllowed(String(ip))) return next();
-      next(new Error("NETWORK_RESTRICTED"));
-    } catch {
-      next(); // fail-open
-    }
-  });
+  // Isolation is by visibility (partitioning), not by blocking realtime access —
+  // online/mobile users must always be able to connect. See middleware/networkLock.
 
   nsp.on("connection", (socket) => {
     const { userId, deviceId } = socket.data;
